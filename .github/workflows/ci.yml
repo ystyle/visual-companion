@@ -1,0 +1,112 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # gofmt is not covered by go vet, and formatting drift is a common way
+      # for agent-authored changes to slip through review.
+      - name: gofmt
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "These files are not gofmt'd:"
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # The race detector needs a C toolchain. Windows runners have one via
+      # mingw; if it is ever missing we still want the other platforms to have
+      # run this, so the step is limited to linux and macos.
+      - name: go test -race
+        if: matrix.os != 'windows-latest'
+        run: go test -race -count=1 ./...
+
+      - name: go test
+        if: matrix.os == 'windows-latest'
+        run: go test -count=1 ./...
+
+      - name: coverage
+        if: matrix.os == 'ubuntu-latest'
+        run: go test -coverprofile=coverage.out ./internal/...
+
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: coverage
+          path: coverage.out
+          if-no-files-found: ignore
+
+  build:
+    name: build binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: cross-compile
+        run: VERSION=0.0.0-ci scripts/build-release.sh
+
+      # Prove the "copy and run" property rather than assuming it: every
+      # published artifact must be statically linked.
+      - name: assert static linking
+        run: |
+          fail=0
+          for f in dist/visual-companion-linux-*; do
+            needed="$(readelf -d "$f" 2>/dev/null | grep -c NEEDED || true)"
+            if [[ "$needed" != "0" ]]; then
+              echo "$f has $needed dynamic dependencies"
+              fail=1
+            fi
+          done
+          # One artifact per target, plus SHA256SUMS.
+          count="$(ls -1 dist | wc -l)"
+          if [[ "$count" != "6" ]]; then
+            echo "expected 6 files in dist/, found $count"
+            ls -1 dist
+            fail=1
+          fi
+          exit $fail
+
+      - name: smoke test the linux binary
+        run: |
+          ./dist/visual-companion-linux-amd64 --version
+
+      - name: verify checksums are well formed
+        run: |
+          cd dist
+          sha256sum -c SHA256SUMS
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: visual-companion-binaries
+          path: dist/

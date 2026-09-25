@@ -1,0 +1,6 @@
+{
+  "name": "visual-companion-assets",
+  "private": true,
+  "type": "commonjs",
+  "//": "helper.js is a classic browser script that also exports its pure helpers via module.exports for tests. Declaring commonjs here keeps node from treating it as ESM (which would make module.exports a silent no-op) even when this directory sits inside a package that sets type=module."
+}

@@ -1,0 +1,6 @@
+dist/
+.tmp-bin/
+*.exe
+
+# Sessions this tool creates when you point it at this repository.
+.superpowers/

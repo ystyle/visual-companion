@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.0.0). Must already exist.'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  # Gate the release on the same checks CI runs, so a tag cannot publish a
+  # binary that does not build, test, or format cleanly.
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [[ -n "$unformatted" ]]; then
+            echo "$unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: test with race detector
+        run: go test -race -count=1 ./...
+
+  release:
+    name: build and publish
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: resolve version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            tag="${{ github.event.inputs.tag }}"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      - name: build artifacts
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: scripts/build-release.sh
+
+      - name: assert static linking
+        run: |
+          for f in dist/visual-companion-linux-*; do
+            needed="$(readelf -d "$f" 2>/dev/null | grep -c NEEDED || true)"
+            if [[ "$needed" != "0" ]]; then
+              echo "$f has dynamic dependencies; it is not copy-and-run"
+              exit 1
+            fi
+          done
+
+      - name: smoke test
+        run: ./dist/visual-companion-linux-amd64 --version
+
+      - name: show what will be published
+        run: |
+          echo "Publishing tag ${{ steps.version.outputs.tag }}"
+          ls -lh dist/
+          cat dist/SHA256SUMS
+
+      - name: create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          files: |
+            dist/visual-companion-*
+            dist/SHA256SUMS
+          body: |
+            ## Install
+
+            One line, detects your platform and verifies the checksum:
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh | bash
+            ```
+
+            Prefer to check what you are running first — the script is short:
+
+            ```bash
+            curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/scripts/install.sh
+            ```
+
+            Or download the artifact for your platform below, verify it against
+            `SHA256SUMS`, and put it on your `PATH`.
+
+            ## Configure your agent
+
+            ```bash
+            claude mcp add visual-companion -- visual-companion --project-dir /absolute/path/to/project
+            ```
+
+            See the [README](https://github.com/${{ github.repository }}#readme) for the
+            full setup, including hosts configured by JSON.
