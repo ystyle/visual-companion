@@ -23,8 +23,8 @@ func TestWorkspaceComesFromClientRoots(t *testing.T) {
 	out, text := callToolText(t, cs, "start_companion", nil)
 
 	dir, _ := out["session_dir"].(string)
-	wantRoot := filepath.Join(workspace, sessionDirName)
-	if !strings.HasPrefix(dir, wantRoot) {
+	wantRoot := canonical(t, filepath.Join(workspace, sessionDirName))
+	if !strings.HasPrefix(canonical(t, dir), wantRoot) {
 		t.Errorf("session_dir = %q, want it under %q", dir, wantRoot)
 	}
 	if !strings.Contains(text, workspace) {
@@ -42,8 +42,8 @@ func TestFallbackToWorkingDirectory(t *testing.T) {
 	out, text := callToolText(t, cs, "start_companion", nil)
 
 	dir, _ := out["session_dir"].(string)
-	wantRoot := filepath.Join(workspace, sessionDirName)
-	if !strings.HasPrefix(dir, wantRoot) {
+	wantRoot := canonical(t, filepath.Join(workspace, sessionDirName))
+	if !strings.HasPrefix(canonical(t, dir), wantRoot) {
 		t.Errorf("session_dir = %q, want it under %q", dir, wantRoot)
 	}
 	if !strings.Contains(text, "working directory") {
@@ -61,8 +61,8 @@ func TestExplicitProjectDirBeatsRoots(t *testing.T) {
 	out, text := callToolText(t, cs, "start_companion", nil)
 
 	dir, _ := out["session_dir"].(string)
-	wantRoot := filepath.Join(pinned, sessionDirName)
-	if !strings.HasPrefix(dir, wantRoot) {
+	wantRoot := canonical(t, filepath.Join(pinned, sessionDirName))
+	if !strings.HasPrefix(canonical(t, dir), wantRoot) {
 		t.Errorf("session_dir = %q, want the pinned %q", dir, wantRoot)
 	}
 	if strings.Contains(dir, rootsWorkspace) {
@@ -197,6 +197,23 @@ func TestSessionsFromDifferentWorkspacesStaySeparate(t *testing.T) {
 }
 
 // --- helpers ---------------------------------------------------------------
+
+// canonical resolves symlinks so a path can be compared with one the server
+// derived. macOS is why this exists: /var is a symlink to /private/var, so
+// t.TempDir() reports /var/... while os.Getwd() after a chdir reports
+// /private/var/..., and a naive prefix check fails on a correct implementation.
+func canonical(t *testing.T, path string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		// The leaf may not exist yet; canonicalize the part that does.
+		if parent, perr := filepath.EvalSymlinks(filepath.Dir(path)); perr == nil {
+			return filepath.Join(parent, filepath.Base(path))
+		}
+		return filepath.Clean(path)
+	}
+	return resolved
+}
 
 func chdir(t *testing.T, dir string) func() {
 	t.Helper()

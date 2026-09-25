@@ -1,0 +1,17 @@
+# Normalize line endings in the repository and in every working tree.
+#
+# Without this, git's core.autocrlf on Windows checks the Go sources out with
+# CRLF and `gofmt -l` then reports every file as unformatted — which is exactly
+# what happened on the first CI run. The files are LF in the repository; this
+# keeps them LF on disk everywhere.
+* text=auto eol=lf
+
+# Binary artifacts must never be line-ending converted. (None are committed —
+# releases carry them — but a contributor adding one locally should not corrupt
+# it.)
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
