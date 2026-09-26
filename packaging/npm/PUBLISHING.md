@@ -25,23 +25,72 @@ That is npm's response to a token it does not accept — it deliberately does no
 distinguish "no such package" from "you may not create it", so a 404 on PUT
 almost always means the token, not the name.
 
-Check the token before blaming anything else:
+Check which token you are actually using before blaming anything else. This
+machine demonstrates both failure modes at once:
+
+- `~/.npmrc` holds a token scoped to `registry.npmjs.org` that has since been
+  revoked. `npm whoami` against the official registry answers `{}` or 401.
+- The valid token lives in the `NPM_TOKEN` environment variable, exported from
+  `~/.zshrc`. **npm does not read `NPM_TOKEN` on its own** — an env var is not
+  an `.npmrc` entry, so `npm whoami` fails even though a working token is right
+  there in the environment.
+
+Two consequences worth remembering:
+
+1. A non-interactive shell does not source `~/.zshrc`. `zsh -c 'echo $NPM_TOKEN'`
+   prints nothing; `zsh -ic` (interactive) does. That difference cost more time
+   here than the actual publish did.
+2. The registry file and the environment variable can disagree. Check both:
 
 ```bash
-npm whoami --registry=https://registry.npmjs.org/
+zsh -ic 'npm whoami --registry=https://registry.npmjs.org/'                 # uses ~/.npmrc
+zsh -ic 'curl -sS -H "Authorization: Bearer $NPM_TOKEN" \
+  https://registry.npmjs.org/-/whoami'                                      # uses the env var
 ```
 
-`{}` or a 401 means the token is revoked or expired. Mint a new **granular
-access token** with *Read and write* permission at
-<https://www.npmjs.com/settings/~/tokens>, and put it in `~/.npmrc`:
+The second returning `{"username":"..."}` while the first returns 401 means the
+env var is the good one.
+
+Also note that `~/.npmrc` may point `registry` at a mirror (npmmirror here), so
+`whoami` and `publish` would go somewhere your npmjs token means nothing. Always
+pass the registry explicitly.
+
+Publishing with the environment token, without writing it to disk anywhere
+`git` can see:
+
+```bash
+cd packaging/npm
+printf "//registry.npmjs.org/:_authToken=%s\n" "$NPM_TOKEN" > .npmrc   # gitignored
+chmod 600 .npmrc
+npm publish
+rm -f .npmrc
+```
+
+Or mint a fresh granular token with *Read and write* permission at
+<https://www.npmjs.com/settings/~/tokens> and fix `~/.npmrc` properly.
+
+## A 404 on PUT does not mean the name is taken
+
+`npm publish` answers
 
 ```
-//registry.npmjs.org/:_authToken=npm_xxxxxxxxxxxxxxxx
+404 Not Found - PUT https://registry.npmjs.org/<name>
 ```
 
-Note that `~/.npmrc` may point `registry` at a mirror (npmmirror, for instance).
-`whoami` and `publish` then go to the mirror, which does not know about your
-npmjs token. Always pass the registry explicitly, as the commands below do.
+both when the token is rejected and when the package genuinely does not exist
+yet. npm deliberately does not distinguish them. If a GET of the same name also
+404s, the name is free and the problem is the token.
+
+## A successful publish is not immediately readable
+
+The write path and the read path are different services. `npm publish` returned
+`200` for the PUT while `GET /visual-companion` kept answering `404` for roughly
+twenty seconds afterwards. Check the log for the PUT status before concluding a
+publish failed:
+
+```bash
+grep "http fetch PUT" ~/.npm/_logs/*-debug-0.log | tail -1
+```
 
 ## Publishing
 
