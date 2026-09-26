@@ -538,6 +538,11 @@ type Event struct {
 	// Count is how many times this exact interaction was repeated in a row.
 	// The browser does not send it; the server derives it.
 	Count int `json:"count,omitempty"`
+	// Selected is the full set of choices ticked at the moment of the click,
+	// sent by multi-select containers. Without it a click cannot be told apart
+	// from an un-click: "selected A and C, then dropped C" and "selected C
+	// twice" produce identical bare clicks.
+	Selected []string `json:"selected,omitempty"`
 }
 
 // recordEvent appends an interaction to the session's events file and logs it
@@ -556,19 +561,24 @@ func (s *Session) recordEvent(ev Event) error {
 	if n := len(s.recent); n > 0 {
 		last := &s.recent[n-1]
 		if last.Type == ev.Type && last.Choice == ev.Choice &&
-			last.Value == ev.Value && last.Text == ev.Text {
+			last.Value == ev.Value && last.Text == ev.Text &&
+			sameStrings(last.Selected, ev.Selected) {
 			last.Count++
 			last.Timestamp = ev.Timestamp
 			return s.rewriteEventsLocked()
 		}
 	}
 
+	// Selected must be carried through: dropping it here made every stored run
+	// look identical, so ticking and unticking the same option merged into one
+	// event and the final selection set was lost.
 	entry := Event{
 		Type:       ev.Type,
 		Choice:     ev.Choice,
 		Value:      ev.Value,
 		Text:       ev.Text,
 		ID:         ev.ID,
+		Selected:   ev.Selected,
 		Timestamp:  ev.Timestamp,
 		Generation: ev.Generation,
 		Count:      1,
@@ -628,6 +638,19 @@ func (s *Session) ReadEvents(keep bool) ([]Event, error) {
 		_ = os.Remove(s.eventsPath)
 	}
 	return out, nil
+}
+
+// sameStrings reports whether two string slices hold the same values in order.
+func sameStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // TotalClicks reports how many individual interactions the runs represent.

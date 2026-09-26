@@ -239,6 +239,12 @@ server wraps them in a themed frame that provides the CSS classes you need:
 </div>
 ```
 
+Add `data-multiselect` to a `.options` or `.cards` container to let the user tick
+several choices. Each event from a multi-select container also carries the full
+set ticked at that moment, because a click alone cannot express "I just
+*unticked* that" — without it, `selected A, selected C, unticked C` reads
+exactly like `selected C twice`.
+
 Available classes: `.options` (+ `data-multiselect`), `.cards`, `.card`,
 `.mockup`, `.mockup-header`, `.mockup-body`, `.split`, `.pros-cons`,
 `.placeholder`, `.mock-nav`, `.mock-sidebar`, `.mock-content`, `.mock-button`,

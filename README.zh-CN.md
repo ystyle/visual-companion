@@ -223,6 +223,10 @@ server 的 MCP `instructions` 里，所以它跟着工具走，而不是躺在�
 </div>
 ```
 
+给 `.options` 或 `.cards` 容器加 `data-multiselect` 即可多选。多选容器发出的每个
+事件还会附带**当时完整的已勾选集合**——因为单看一次点击无法表达"我刚把它取消勾选
+了"：没有这个字段，「选 A、选 C、取消 C」和「选 A、选 C、再选一次 C」读起来一模一样。
+
 可用类：`.options`（加 `data-multiselect` 支持多选）、`.cards`、`.card`、
 `.mockup`、`.mockup-header`、`.mockup-body`、`.split`、`.pros-cons`、
 `.placeholder`、`.mock-nav`、`.mock-sidebar`、`.mock-content`、`.mock-button`、
