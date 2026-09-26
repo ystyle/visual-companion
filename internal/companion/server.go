@@ -77,6 +77,7 @@ type Session struct {
 	seenTimes  map[string]time.Time // their mtimes, to tell an update from a no-op
 	newestFile string
 	current    screenEntry // design/version identity of newestFile
+	recent     []Event     // this screen's interactions, runs collapsed
 	generation int
 	eventsPath string
 	infoPath   string
@@ -439,8 +440,13 @@ func (s *Session) poll() {
 
 	// A genuinely new screen starts a new interaction round: a version bumped
 	// to v2 is a new question, so stale clicks from v1 must not carry over.
+	// Both the file and the in-memory runs have to be reset — the in-memory
+	// slice is what reads are served from.
 	if len(added) > 0 {
 		_ = os.Remove(s.eventsPath)
+		s.mu.Lock()
+		s.recent = nil
+		s.mu.Unlock()
 	}
 
 	times := map[string]time.Time{}
@@ -529,12 +535,54 @@ type Event struct {
 	ID         string `json:"id,omitempty"`
 	Timestamp  int64  `json:"timestamp,omitempty"`
 	Generation int    `json:"generation"`
+	// Count is how many times this exact interaction was repeated in a row.
+	// The browser does not send it; the server derives it.
+	Count int `json:"count,omitempty"`
 }
 
 // recordEvent appends an interaction to the session's events file and logs it
 // to stdout so the MCP host's transcript also carries the action.
 func (s *Session) recordEvent(ev Event) error {
 	ev.Generation = s.Generation()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Deliberate compression: clicking the same choice again is one decision
+	// held, not a new decision. Keeping every click made "I changed my mind
+	// twice" indistinguishable from "I clicked forty times while thinking",
+	// and buried the signal under hundreds of lines the agent had to read.
+	// Repeat clicks collapse into a count; every change of mind is preserved.
+	if n := len(s.recent); n > 0 {
+		last := &s.recent[n-1]
+		if last.Type == ev.Type && last.Choice == ev.Choice &&
+			last.Value == ev.Value && last.Text == ev.Text {
+			last.Count++
+			last.Timestamp = ev.Timestamp
+			return s.rewriteEventsLocked()
+		}
+	}
+
+	entry := Event{
+		Type:       ev.Type,
+		Choice:     ev.Choice,
+		Value:      ev.Value,
+		Text:       ev.Text,
+		ID:         ev.ID,
+		Timestamp:  ev.Timestamp,
+		Generation: ev.Generation,
+		Count:      1,
+	}
+	s.recent = append(s.recent, entry)
+	if err := s.appendEventLocked(entry); err != nil {
+		return err
+	}
+	s.logEvent(map[string]any{"source": "user-event", "type": ev.Type, "choice": ev.Choice, "value": ev.Value, "text": ev.Text})
+	return nil
+}
+
+// appendEventLocked writes one run to the events file. Caller holds s.mu.
+func (s *Session) appendEventLocked(ev Event) error {
 	data, err := marshalJSON(ev)
 	if err != nil {
 		return err
@@ -544,39 +592,55 @@ func (s *Session) recordEvent(ev Event) error {
 		return err
 	}
 	defer f.Close()
-	if _, err := f.Write(append(data, '\n')); err != nil {
-		return err
-	}
-	s.logEvent(map[string]any{"source": "user-event", "type": ev.Type, "choice": ev.Choice, "value": ev.Value, "text": ev.Text})
-	return nil
+	_, err = f.Write(append(data, '\n'))
+	return err
 }
 
-// ReadEvents returns the interactions recorded for the current screen and,
-// unless keep is false, clears the file so the next read starts fresh.
+// rewriteEventsLocked rewrites the whole file after a run's count changed, so
+// the audit trail on disk agrees with what the agent was told. The file stays
+// small because runs are collapsed, and a browser session produces a handful
+// of runs, not thousands. Caller holds s.mu.
+func (s *Session) rewriteEventsLocked() error {
+	var b strings.Builder
+	for _, ev := range s.recent {
+		data, err := marshalJSON(ev)
+		if err != nil {
+			return err
+		}
+		b.Write(data)
+		b.WriteByte('\n')
+	}
+	return os.WriteFile(s.eventsPath, []byte(b.String()), 0o600)
+}
+
+// ReadEvents returns the current screen's interactions as runs, oldest first.
+// Unless keep is true the round is consumed, so a second read does not replay
+// the same clicks.
 func (s *Session) ReadEvents(keep bool) ([]Event, error) {
-	var out []Event
-	data, err := os.ReadFile(s.eventsPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var ev Event
-		if err := unmarshalJSON([]byte(line), &ev); err != nil {
-			continue // tolerate a torn final line
-		}
-		out = append(out, ev)
-	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]Event, len(s.recent))
+	copy(out, s.recent)
+
 	if !keep {
+		s.recent = nil
 		_ = os.Remove(s.eventsPath)
 	}
 	return out, nil
+}
+
+// TotalClicks reports how many individual interactions the runs represent.
+func TotalClicks(events []Event) int {
+	n := 0
+	for _, ev := range events {
+		if ev.Count > 1 {
+			n += ev.Count
+		} else {
+			n++
+		}
+	}
+	return n
 }
 
 // logEvent writes one JSON line to the server's stdout log file. stdout is

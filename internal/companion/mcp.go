@@ -307,25 +307,142 @@ func describeEvents(res EventsResult) string {
 			"The user may have replied in the terminal instead — treat their typed message as the primary " +
 			"feedback and these events as supplementary."
 	}
+
+	clicks := TotalClicks(res.Events)
 	var b strings.Builder
-	fmt.Fprintf(&b, "%d interaction(s) on screen generation %d, oldest first:\n\n", res.Count, res.Generation)
-	for i, ev := range res.Events {
-		what := ev.Choice
-		if what == "" {
-			what = ev.Value
+	fmt.Fprintf(&b, "%d interaction(s) on screen generation %d.\n\n", clicks, res.Generation)
+
+	// A map of what the user touched, then the order they changed their mind.
+	// Repeat clicks stay visible as counts instead of one line each, so
+	// "clicked A then B then settled on A" cannot be buried under forty lines.
+	counts := map[string]int{}
+	var order []string
+	for _, ev := range res.Events {
+		key := ev.Choice
+		if key == "" {
+			key = ev.Value
+		}
+		if key == "" {
+			key = "(unlabelled)"
+		}
+		if _, seen := counts[key]; !seen {
+			order = append(order, key)
+		}
+		n := ev.Count
+		if n == 0 {
+			n = 1
+		}
+		counts[key] += n
+	}
+	for i, key := range order {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		if counts[key] > 1 {
+			fmt.Fprintf(&b, "%s x%d", key, counts[key])
+		} else {
+			b.WriteString(key)
+		}
+	}
+	b.WriteString("\n")
+
+	if len(res.Events) > 1 {
+		fmt.Fprintf(&b, "Selection order (%d changes): ", len(res.Events)-1)
+		b.WriteString(selectionPath(res.Events, 24))
+		b.WriteString("\n")
+	}
+	if last := finalChoice(res.Events); last != "" {
+		fmt.Fprintf(&b, "Currently selected: %s\n", last)
+	}
+	// Choices are keys like "a" and "b"; the label is what the user actually
+	// read on screen. Without this the agent sees a letter and has to guess
+	// what it stood for.
+	if legend := labelLegend(res.Events); legend != "" {
+		fmt.Fprintf(&b, "Labels: %s\n", legend)
+	}
+
+	b.WriteString("\nA short selection order means the user knew what they wanted. A long one means they " +
+		"went back and forth, which is worth asking about rather than guessing. The user's terminal " +
+		"message remains the primary feedback.")
+	return b.String()
+}
+
+// selectionPath renders the choices in the order they were made.
+//
+// Consecutive repeats are already collapsed by the server, so what remains is
+// the actual sequence of mind-changes. That sequence still gets arbitrarily
+// long when someone oscillates between two options, so a period-2 cycle is
+// folded into "a -> b x12": the shape of the hesitation survives, the token
+// count does not. Anything longer or irregular is truncated from the middle so
+// both the starting point and the conclusion are visible.
+func selectionPath(events []Event, max int) string {
+	parts := make([]string, 0, len(events))
+	for _, ev := range events {
+		key := ev.Choice
+		if key == "" {
+			key = ev.Value
+		}
+		if key == "" {
+			key = "?"
+		}
+		parts = append(parts, key)
+	}
+
+	// Fold a repeating 2-cycle: a b a b a b -> a -> b x3
+	if len(parts) >= 4 && parts[0] != parts[1] {
+		repeats := true
+		for i := 2; i < len(parts); i++ {
+			if parts[i] != parts[i%2] {
+				repeats = false
+				break
+			}
+		}
+		if repeats && len(parts)%2 == 0 {
+			return fmt.Sprintf("%s -> %s x%d", parts[0], parts[1], len(parts)/2)
+		}
+	}
+
+	if len(parts) > max {
+		head := max / 2
+		tail := max - head
+		return strings.Join(append(append(append([]string{}, parts[:head]...),
+			fmt.Sprintf("... %d more ...", len(parts)-max)), parts[len(parts)-tail:]...), " -> ")
+	}
+	return strings.Join(parts, " -> ")
+}
+
+// labelLegend maps each choice key to its on-screen label, in first-seen order.
+func labelLegend(events []Event) string {
+	seen := map[string]bool{}
+	var parts []string
+	for _, ev := range events {
+		if ev.Choice == "" || seen[ev.Choice] {
+			continue
 		}
 		label := strings.TrimSpace(ev.Text)
 		if label == "" {
-			label = "(no label)"
+			continue
 		}
-		kind := ev.Type
-		if kind == "" {
-			kind = "click"
-		}
-		fmt.Fprintf(&b, "  %d. %s %q — %s\n", i+1, kind, what, label)
+		seen[ev.Choice] = true
+		parts = append(parts, fmt.Sprintf("%s = %s", ev.Choice, collapseSpace(label)))
 	}
-	b.WriteString("\nThe last interaction is usually the final selection, but a wandering sequence can " +
-		"indicate hesitation that is worth asking about. The user's terminal message remains the primary " +
-		"feedback.")
-	return b.String()
+	return strings.Join(parts, ", ")
+}
+
+// collapseSpace squeezes an option's full inner text onto one line so a legend
+// entry stays readable.
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// finalChoice reports the choice the user landed on.
+func finalChoice(events []Event) string {
+	if len(events) == 0 {
+		return ""
+	}
+	last := events[len(events)-1]
+	if last.Choice != "" {
+		return last.Choice
+	}
+	return last.Value
 }

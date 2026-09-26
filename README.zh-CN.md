@@ -161,7 +161,9 @@ claude mcp add visual-companion -- visual-companion --project-dir /absolute/path
 - **`push_screen`** —— 把一段 HTML 片段发布为某个命名设计的**新版本**。传
   `design: "dashboard-layout"`，每次修订都复用同一个名字：于是得到 v1、v2……
   不会覆盖任何东西，早先的轮次都留在磁盘上可供比较。
-- **`get_events`** —— 读取当前屏幕推送以来记录的点击，按时间从早到晚。
+- **`get_events`** —— 读取当前屏幕推送以来的交互。对同一选项的重复点击会折叠成
+  计数：一个犹豫的用户产出的是 "b x30"，而不是三十行；而每一次改变主意都被保留
+  为序列：`a -> b x12` 一个 token 就说清了"来回摇摆了十二次"。
 - **`list_sessions`** —— 列出活跃会话及其 URL、目录、待读交互数。只读，
   不会消耗点击。
 

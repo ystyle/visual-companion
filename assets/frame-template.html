@@ -33,8 +33,9 @@
       --success: #34c759;
       --warning: #ff9f0a;
       --error: #ff3b30;
-      --selected-bg: #e8f4fd;
+      --selected-bg: #dceeff;
       --selected-border: #0071e3;
+      --selected-ring: rgba(0, 113, 227, 0.22);
     }
 
     @media (prefers-color-scheme: dark) {
@@ -89,21 +90,25 @@
       padding: 0.5rem 1.5rem;
       flex-shrink: 0;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
+      grid-template-columns: minmax(0, 1fr) auto auto auto;
       align-items: center;
       gap: 1rem;
       min-height: 42px;
     }
     .header .brand { justify-self: start; width: 100%; font-size: 0.75rem; line-height: 1; }
     .header .badge { grid-column: 2; justify-self: end; }
-    .header .status { grid-column: 3; line-height: 1; }
+    .header .status { grid-column: 4; line-height: 1; }
+    /* Text confirmation of the selection, so the state is not conveyed by
+       colour alone. */
+    .header .selected-text { grid-column: 3; justify-self: end; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22rem; }
     .header span {
       font-size: 0.75rem;
       color: var(--text-secondary);
     }
     .header .selected-text {
-      color: var(--accent);
-      font-weight: 500;
+      font-size: 0.75rem;
+      color: var(--selected-border);
+      font-weight: 600;
     }
 
     /* ===== TYPOGRAPHY ===== */
@@ -127,7 +132,24 @@
       gap: 1rem;
     }
     .option:hover { border-color: var(--accent); }
-    .option.selected { background: var(--selected-bg); border-color: var(--selected-border); }
+    /* Selection has to be unmistakable at a glance. The old treatment (a pale
+       fill and a 2px border) was technically visible and easy to miss, which
+       made a chosen option look like an unchosen one. */
+    .option.selected {
+      background: var(--selected-bg);
+      border-color: var(--selected-border);
+      border-width: 3px;
+      box-shadow: 0 0 0 3px var(--selected-ring), 0 2px 8px rgba(0,0,0,0.06);
+    }
+    .option.selected::after {
+      content: '✓';
+      margin-left: auto;
+      align-self: center;
+      color: var(--selected-border);
+      font-weight: 700;
+      font-size: 1.1rem;
+      flex-shrink: 0;
+    }
     .option .letter {
       background: var(--bg-tertiary);
       color: var(--text-secondary);
@@ -137,6 +159,7 @@
       font-weight: 600; font-size: 0.85rem; flex-shrink: 0;
     }
     .option.selected .letter { background: var(--accent); color: white; }
+    .option.selected .content h3 { color: var(--selected-border); }
     .option .content { flex: 1; }
     .option .content h3 { font-size: 0.95rem; margin-bottom: 0.15rem; }
     .option .content p { color: var(--text-secondary); font-size: 0.85rem; margin: 0; }
@@ -152,7 +175,11 @@
       transition: all 0.15s ease;
     }
     .card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
-    .card.selected { border-color: var(--selected-border); border-width: 2px; }
+    .card.selected {
+      border-color: var(--selected-border);
+      border-width: 3px;
+      box-shadow: 0 0 0 3px var(--selected-ring), 0 4px 14px rgba(0,0,0,0.10);
+    }
     .card-image { background: var(--bg-tertiary); aspect-ratio: 16/10; display: flex; align-items: center; justify-content: center; }
     .card-body { padding: 1rem; }
     .card-body h3 { margin-bottom: 0.25rem; }
@@ -209,6 +236,7 @@
   <div class="header">
     <!-- BRANDING -->
     <div class="badge"><!-- BADGE --></div>
+    <div class="selected-text"></div>
     <div class="status">Connecting…</div>
   </div>
 

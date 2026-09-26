@@ -80,8 +80,18 @@ process supervision back means re-importing the problem the project was built to
 delete.
 
 **Events are cleared when a new screen arrives.** Stale clicks from an
-already-resolved choice must not leak into the next round. See
+already-resolved choice must not leak into the next round. Both the file and the
+in-memory runs are reset — `s.recent` is what reads are served from. See
 `Session.poll()`.
+
+**Repeated clicks are collapsed; changes of mind are not.** `Session.recordEvent`
+folds a repeated click on the same choice into a `Count` on the existing run, and
+the file is rewritten so the audit trail agrees with what the agent was told.
+`describeEvents` then folds an oscillating path (`a -> b x12`). Do not undo this
+by storing one record per click: an undecided user generated hundreds of lines
+the agent had to read to find the two that mattered. The compression must keep
+three things visible — the true interaction count, every *change* of choice, and
+the final selection — and `hysteresis_test.go` asserts each one.
 
 **Session location is resolved per session, never at process launch.** The path
 is decided inside `start_companion` (`resolveLocation`), in this order:

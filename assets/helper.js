@@ -152,6 +152,16 @@
     const target = e.target.closest('[data-choice]');
     if (!target) return;
 
+    // Multi-select containers need the whole set reflected, not just the last
+    // click.
+    const container = target.closest('.options[data-multiselect], .cards[data-multiselect]');
+    if (container) {
+      const chosen = Array.from(container.querySelectorAll('.selected'))
+        .map(function(o) { return o.dataset.choice; });
+      const box = document.querySelector('.selected-text');
+      if (box) box.textContent = chosen.length ? 'Selected: ' + chosen.join(', ') : '';
+    }
+
     sendEvent({
       type: 'click',
       text: target.textContent.trim(),
@@ -162,6 +172,17 @@
 
   // Frame UI: selection tracking
   window.selectedChoice = null;
+
+  // Confirm the selection in words as well as colour: a highlight alone is
+  // easy to miss, and it conveys nothing to anyone who cannot see it.
+  function reflectSelection(el) {
+    const box = document.querySelector('.selected-text');
+    if (!box) return;
+    if (!el) { box.textContent = ''; return; }
+    const heading = el.querySelector('h3, .card-body h3, .letter');
+    const label = (heading && heading.textContent.trim()) || el.dataset.choice || '';
+    box.textContent = label ? 'Selected: ' + label : '';
+  }
 
   window.toggleSelect = function(el) {
     const container = el.closest('.options') || el.closest('.cards');
@@ -175,6 +196,7 @@
       el.classList.add('selected');
     }
     window.selectedChoice = el.dataset.choice;
+    reflectSelection(el.classList.contains('selected') ? el : null);
   };
 
   // Expose API for explicit use

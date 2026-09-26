@@ -170,8 +170,11 @@ Four tools:
   design. Pass `design: "dashboard-layout"` and reuse the same name on every
   revision: you get v1, then v2, and so on. Nothing is overwritten, so earlier
   rounds stay on disk for comparison.
-- **`get_events`** — reads the clicks recorded since the current screen was
-  pushed, oldest first.
+- **`get_events`** — reads the interactions recorded since the current screen
+  was pushed. Repeat clicks on the same choice collapse into a count, so an
+  undecided user produces "b x30" rather than thirty lines, while every change
+  of mind is preserved as a sequence: `a -> b x12` says "they oscillated twelve
+  times" in one token.
 - **`list_sessions`** — lists live sessions with their URL, directory, and how
   many interactions are waiting. Read-only: it does not consume clicks.
 
