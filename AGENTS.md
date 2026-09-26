@@ -171,15 +171,6 @@ Keep it copy-pasteable as one block; keep the human-facing details below it.
 as the server version, so a release built without the flag will announce itself
 as `dev`.
 
-**Multi-select events carry the authoritative selection set.** `helper.js` sends
-`selected: [...]` on every event from a `data-multiselect` container, and
-`Event.Selected` must survive `recordEvent` — dropping it made tick and untick
-look identical, so they merged into one run and the final set was lost.
-`sameStrings` is part of the dedupe key for the same reason. In
-`describeEvents`, a multi-select question reports "Currently ticked" and must
-NOT also report the last click as "Currently selected": the last click may have
-been the one that removed an option.
-
 ## `assets/` is a shared contract
 
 `frame-template.html` and `helper.js` define the vocabulary the agent writes

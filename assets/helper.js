@@ -152,26 +152,21 @@
     const target = e.target.closest('[data-choice]');
     if (!target) return;
 
-    // In a multi-select container a click can mean "add" or "remove", and a
-    // bare click event cannot tell those apart — "selected A and C, then
-    // deselected C" would arrive looking exactly like "selected C twice".
-    // The authoritative set goes with every event so the agent never has to
-    // reconstruct it.
+    // Multi-select containers need the whole set reflected, not just the last
+    // click.
     const container = target.closest('.options[data-multiselect], .cards[data-multiselect]');
-    let selected = null;
     if (container) {
-      selected = Array.from(container.querySelectorAll('.selected'))
+      const chosen = Array.from(container.querySelectorAll('.selected'))
         .map(function(o) { return o.dataset.choice; });
       const box = document.querySelector('.selected-text');
-      if (box) box.textContent = selected.length ? 'Selected: ' + selected.join(', ') : '';
+      if (box) box.textContent = chosen.length ? 'Selected: ' + chosen.join(', ') : '';
     }
 
     sendEvent({
       type: 'click',
       text: target.textContent.trim(),
       choice: target.dataset.choice,
-      id: target.id || null,
-      selected: selected
+      id: target.id || null
     });
   });
 

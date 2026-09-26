@@ -4,3 +4,6 @@ dist/
 
 # Sessions this tool creates when you point it at this repository.
 .superpowers/
+
+# Scratch directories used while verifying this project.
+.tmp-*/

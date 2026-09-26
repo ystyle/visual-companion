@@ -351,21 +351,9 @@ func describeEvents(res EventsResult) string {
 		b.WriteString(selectionPath(res.Events, 24))
 		b.WriteString("\n")
 	}
-	// Single- and multi-select need different conclusions. In a multi-select
-	// container the last click is not the answer — it may have *removed* an
-	// option — so reporting it as "currently selected" contradicts the real
-	// set and invites the agent to act on the wrong thing.
-	set, multi := lastSelectionSet(res.Events)
-	if multi {
-		if len(set) == 0 {
-			fmt.Fprintf(&b, "Currently ticked: (nothing)\n")
-		} else {
-			fmt.Fprintf(&b, "Currently ticked: %s\n", strings.Join(set, ", "))
-		}
-	} else if last := finalChoice(res.Events); last != "" {
+	if last := finalChoice(res.Events); last != "" {
 		fmt.Fprintf(&b, "Currently selected: %s\n", last)
 	}
-
 	// Choices are keys like "a" and "b"; the label is what the user actually
 	// read on screen. Without this the agent sees a letter and has to guess
 	// what it stood for.
@@ -445,19 +433,6 @@ func labelLegend(events []Event) string {
 // entry stays readable.
 func collapseSpace(s string) string {
 	return strings.Join(strings.Fields(s), " ")
-}
-
-// lastSelectionSet returns the selection set from the most recent event, and
-// whether this was a multi-select question at all. The second return value
-// matters: a container is multi-select as soon as any event carries the field,
-// even if the user has since unticked everything.
-func lastSelectionSet(events []Event) ([]string, bool) {
-	for i := len(events) - 1; i >= 0; i-- {
-		if events[i].Selected != nil {
-			return events[i].Selected, true
-		}
-	}
-	return nil, false
 }
 
 // finalChoice reports the choice the user landed on.

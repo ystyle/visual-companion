@@ -403,19 +403,9 @@ func splitKeyedURL(t *testing.T, keyedURL string) (base, key string) {
 
 func postClick(t *testing.T, keyedURL, choice, text string) {
 	t.Helper()
-	postEvent(t, keyedURL, map[string]any{"type": "click", "choice": choice, "text": text})
-}
-
-// postEvent sends a raw interaction, for tests that need fields beyond the
-// basic click shape.
-func postEvent(t *testing.T, keyedURL string, event map[string]any) {
-	t.Helper()
 	base, key := splitKeyedURL(t, keyedURL)
-	payload, err := json.Marshal(event)
-	if err != nil {
-		t.Fatalf("marshal event: %v", err)
-	}
-	resp, err := http.Post(base+"/events?key="+key, "application/json", strings.NewReader(string(payload)))
+	payload := fmt.Sprintf(`{"type":"click","choice":%q,"text":%q}`, choice, text)
+	resp, err := http.Post(base+"/events?key="+key, "application/json", strings.NewReader(payload))
 	if err != nil {
 		t.Fatalf("POST event: %v", err)
 	}
