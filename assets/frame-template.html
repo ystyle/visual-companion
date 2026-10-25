@@ -81,8 +81,27 @@
     .status { font-size: 0.7rem; color: var(--status-color, var(--success)); display: flex; align-items: center; gap: 0.4rem; justify-self: end; white-space: nowrap; line-height: 1; }
     .status::before { content: ''; width: 6px; height: 6px; background: var(--status-color, var(--success)); border-radius: 50%; }
 
-    .main { flex: 1; overflow-y: auto; }
-    #frame-content { padding: 2rem; min-height: 100%; }
+    .main { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+
+    /* Content column.
+       Two failure modes on a large display: without a cap, an option card
+       stretches to 3840px and the line becomes unreadable; with only a cap, the
+       page becomes a small island floating in empty space. So the column is
+       capped at a generous measure AND the type, spacing and controls scale up
+       with the viewport, keeping the same visual weight at 1080p, 2K and 4K. */
+    #frame-content {
+      padding: clamp(1.5rem, 2.5vw, 4rem) clamp(1.5rem, 3vw, 5rem);
+      width: 100%;
+      max-width: min(96rem, 92vw);
+      margin-inline: auto;
+      /* A question with two options does not fill a 4K viewport, and dumping
+         all the slack below the content makes the page read as broken. Centre
+         it vertically while there is room; scroll normally once there is not.
+         `margin-block: auto` on a flex child does exactly that. */
+      margin-block: auto;
+    }
+    /* Body copy keeps a readable measure even when the column is wide. */
+    .subtitle, .option .content p, .card-body p, .section p { max-width: 68ch; }
 
     .header {
       background: var(--bg-secondary);
@@ -112,19 +131,20 @@
     }
 
     /* ===== TYPOGRAPHY ===== */
-    h2 { font-size: 1.5rem; font-weight: 600; margin-bottom: 0.5rem; }
-    h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.25rem; }
-    .subtitle { color: var(--text-secondary); margin-bottom: 1.5rem; }
+    h2 { font-size: clamp(1.5rem, 0.9rem + 1.1vw, 2.75rem); font-weight: 600; margin-bottom: 0.5rem; }
+    h3 { font-size: clamp(1.1rem, 0.85rem + 0.5vw, 1.7rem); font-weight: 600; margin-bottom: 0.25rem; }
+    .subtitle { color: var(--text-secondary); margin-bottom: clamp(1rem, 1.5vw, 2rem);
+                font-size: clamp(0.95rem, 0.85rem + 0.25vw, 1.2rem); }
     .section { margin-bottom: 2rem; }
     .label { font-size: 0.7rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
 
     /* ===== OPTIONS (for A/B/C choices) ===== */
-    .options { display: flex; flex-direction: column; gap: 0.75rem; }
+    .options { display: flex; flex-direction: column; gap: clamp(0.75rem, 0.5rem + 0.7vw, 1.5rem); }
     .option {
       background: var(--bg-secondary);
       border: 2px solid var(--border);
       border-radius: 12px;
-      padding: 1rem 1.25rem;
+      padding: clamp(0.85rem, 0.5rem + 0.9vw, 1.75rem) clamp(1rem, 0.6rem + 1.1vw, 2.25rem);
       cursor: pointer;
       transition: all 0.15s ease;
       display: flex;
@@ -153,16 +173,21 @@
     .option .letter {
       background: var(--bg-tertiary);
       color: var(--text-secondary);
-      width: 1.75rem; height: 1.75rem;
+      width: clamp(1.75rem, 1.2rem + 1.4vw, 2.75rem);
+      height: clamp(1.75rem, 1.2rem + 1.4vw, 2.75rem);
       border-radius: 6px;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 600; font-size: 0.85rem; flex-shrink: 0;
+      font-weight: 600; font-size: clamp(0.85rem, 0.75rem + 0.35vw, 1.15rem);
+      flex-shrink: 0;
     }
     .option.selected .letter { background: var(--accent); color: white; }
     .option.selected .content h3 { color: var(--selected-border); }
-    .option .content { flex: 1; }
-    .option .content h3 { font-size: 0.95rem; margin-bottom: 0.15rem; }
-    .option .content p { color: var(--text-secondary); font-size: 0.85rem; margin: 0; }
+    .option .content { flex: 1; min-width: 0; }
+    /* Keep the label from stretching into a single very long line. */
+    .option .content h3, .option .content p { max-width: 60ch; }
+    .option .content h3 { font-size: clamp(0.95rem, 0.8rem + 0.4vw, 1.4rem); margin-bottom: 0.15rem; }
+    .option .content p { color: var(--text-secondary);
+                         font-size: clamp(0.85rem, 0.78rem + 0.3vw, 1.1rem); margin: 0; }
 
     /* ===== CARDS (for showing designs/mockups) ===== */
     .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
