@@ -134,6 +134,33 @@ and why.
 
 Add `.visual-companion/` to your `.gitignore`.
 
+### Reaching the companion from another machine
+
+`--host` is the **bind** address; it is not necessarily an address anyone can
+dial. Binding `0.0.0.0` accepts connections on every interface, and the URL is
+then built from this machine's primary outbound address rather than from
+`0.0.0.0` — a URL containing `0.0.0.0` opens for nobody:
+
+```bash
+visual-companion --host 0.0.0.0
+# URL: http://192.168.3.6:43797/?key=…     <- the LAN address, reachable
+```
+
+`start_companion` reports which address it chose and why. Override it when the
+inferred address is wrong — a reverse proxy, a tunnel, a VPN-only interface, or
+split-horizon DNS:
+
+```bash
+visual-companion --host 0.0.0.0 --url-host brainstorm.example
+```
+
+**Binding beyond loopback exposes the port to your network.** The session key in
+the URL remains the gate: requests without it are rejected, the key is compared
+in constant time, and the cookie is `HttpOnly` and `SameSite=Strict`. Still,
+anyone who obtains the full URL — shoulder-surfing, a chat log, a screenshot —
+can read your mockups and inject clicks. Use `0.0.0.0` only on networks you
+trust, and prefer a tunnel or SSH port-forward when you do not.
+
 For Claude Code:
 
 ```bash
@@ -153,8 +180,8 @@ Other flags:
 |---|---|---|
 | `--project-dir`, `--session-dir` | auto-discovered | Pin sessions to this directory |
 | `--no-roots` | off | Don't ask the client for its workspace |
-| `--host` | `127.0.0.1` | Interface to bind; use `0.0.0.0` in a container |
-| `--url-host` | derived from `--host` | Hostname to put in the URL shown to the user |
+| `--host` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` to accept connections from another machine |
+| `--url-host` | inferred | Hostname to put in the URL shown to the user |
 | `--open` | off | Open the browser automatically when a session starts |
 | `--version` | | Print the version and exit |
 

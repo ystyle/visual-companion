@@ -127,6 +127,29 @@ MCP [roots](https://modelcontextprotocol.io/docs/concepts/roots) 上报的工作
 
 记得把 `.visual-companion/` 加进 `.gitignore`。
 
+### 从其他机器访问伴侣
+
+`--host` 是**监听**地址，不一定是别人能拨通的地址。绑定 `0.0.0.0` 会在所有网卡上
+接收连接，此时 URL 会用本机的主出口地址来拼，而不是用 `0.0.0.0`——含 `0.0.0.0`
+的 URL 谁都打不开：
+
+```bash
+visual-companion --host 0.0.0.0
+# URL: http://192.168.3.6:43797/?key=…     <- 局域网地址，可用
+```
+
+`start_companion` 会报告它选了哪个地址以及原因。推断不对时可以覆盖——反向代理、
+隧道、仅 VPN 可用的网卡、或内外网分离的 DNS：
+
+```bash
+visual-companion --host 0.0.0.0 --url-host brainstorm.example
+```
+
+**绑定到非 loopback 会把端口暴露给整个网络。** URL 里的会话密钥仍然是关卡：不带它
+的请求一律拒绝、密钥用常量时间比较、cookie 是 `HttpOnly` + `SameSite=Strict`。
+但任何拿到完整 URL 的人——被人瞥到屏幕、聊天记录、截图——都能看你的 mockup 并
+注入点击。只在可信网络上用 `0.0.0.0`；不可信时请改用隧道或 SSH 端口转发。
+
 Claude Code：
 
 ```bash
@@ -145,8 +168,8 @@ claude mcp add visual-companion -- visual-companion --project-dir /absolute/path
 |---|---|---|
 | `--project-dir`、`--session-dir` | 自动发现 | 把会话固定到该目录 |
 | `--no-roots` | 关闭 | 不向客户端询问工作区 |
-| `--host` | `127.0.0.1` | 绑定网卡；容器里用 `0.0.0.0` |
-| `--url-host` | 由 `--host` 推导 | 展示给用户的 URL 里的主机名 |
+| `--host` | `127.0.0.1` | 绑定网卡。用 `0.0.0.0` 才能接受其他机器的连接 |
+| `--url-host` | 自动推断 | 展示给用户的 URL 里的主机名 |
 | `--open` | 关闭 | 会话启动时自动打开浏览器 |
 | `--version` | | 打印版本并退出 |
 

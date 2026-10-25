@@ -96,12 +96,16 @@ func RegisterTools(server *mcp.Server, reg *Registry, version string) {
 		if err != nil {
 			return nil, nil, err
 		}
+		hostNote := ""
+		if info.URLHostNote != "" {
+			hostNote = info.URLHostNote + "\n\n"
+		}
 		text := fmt.Sprintf(
 			"Companion running.\n\nURL: %s\n\nGive the user that complete URL — the ?key= part is the session key and "+
 				"the server rejects requests without it. Do not shorten it to a bare host:port.\n\n"+
-				"%s\n\n"+
+				"%s%s\n\n"+
 				"Push your first screen with push_screen, then tell the user what is on screen and end your turn.",
-			info.URL, s.location.describe())
+			info.URL, hostNote, s.location.describe())
 		return &mcp.CallToolResult{
 			Content: []mcp.Content{&mcp.TextContent{Text: text}},
 		}, info, nil

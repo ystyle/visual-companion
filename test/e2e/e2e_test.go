@@ -11,8 +11,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
-	"net/url"
+	urlpkg "net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -55,8 +56,15 @@ func connect(t *testing.T, bin, projectDir string) *mcp.ClientSession {
 // process-startup path capture wrong.
 func connectWithRoots(t *testing.T, bin, projectDir string, roots []string) *mcp.ClientSession {
 	t.Helper()
+	return connectWithArgs(t, bin, projectDir, roots, nil)
+}
 
-	args := []string{}
+// connectWithArgs also passes extra CLI flags, for tests that exercise startup
+// configuration rather than the default path.
+func connectWithArgs(t *testing.T, bin, projectDir string, roots, extra []string) *mcp.ClientSession {
+	t.Helper()
+
+	args := append([]string{}, extra...)
 	if projectDir != "" {
 		args = append(args, "--project-dir", projectDir)
 	}
@@ -91,7 +99,7 @@ func connectWithRoots(t *testing.T, bin, projectDir string, roots []string) *mcp
 
 // fileURI renders a local path as a file:// URI.
 func fileURI(path string) string {
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
+	u := urlpkg.URL{Scheme: "file", Path: filepath.ToSlash(path)}
 	if runtime.GOOS == "windows" {
 		u.Path = "/" + u.Path
 	}
@@ -364,6 +372,67 @@ func TestProjectDirFlagBeatsRoots(t *testing.T) {
 	}
 	if strings.Contains(dir, rootsWorkspace) {
 		t.Errorf("roots overrode the explicit flag: %q", dir)
+	}
+}
+
+// TestWildcardBindGivesDialableURL is the acceptance test for serving another
+// machine: --host 0.0.0.0 must accept remote connections without handing out a
+// URL containing 0.0.0.0, which no browser can open.
+func TestWildcardBindGivesDialableURL(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping build-and-spawn test in short mode")
+	}
+	bin := buildBinary(t)
+	cs := connectWithArgs(t, bin, t.TempDir(), nil, []string{"--host", "0.0.0.0"})
+
+	out, text := call(t, cs, "start_companion", nil)
+	url, _ := out["url"].(string)
+	if strings.Contains(url, "0.0.0.0") {
+		t.Fatalf("URL advertises the wildcard address, which nobody can dial: %s", url)
+	}
+	if host, _ := out["url_host"].(string); host == "" || host == "0.0.0.0" {
+		t.Errorf("url_host = %q, want a dialable host", host)
+	}
+	// The agent must be told why the host was inferred.
+	if note, _ := out["url_host_note"].(string); note == "" {
+		t.Error("wildcard bind should explain the inferred URL host to the agent")
+	} else if !strings.Contains(text, note) {
+		t.Errorf("the note should reach the agent's text, got:\n%s", text)
+	}
+
+	// The URL must actually work, and so must the loopback route.
+	if body := fetchAsBrowser(t, url); !strings.Contains(body, "Brainstorm Companion") {
+		t.Error("wildcard-bound URL did not serve the companion")
+	}
+	// Swap only the host, keeping the port and key: a wildcard bind must still
+	// answer on the loopback interface.
+	parsed, err := urlpkg.Parse(url)
+	if err != nil {
+		t.Fatalf("parse url %q: %v", url, err)
+	}
+	parsed.Host = net.JoinHostPort("127.0.0.1", parsed.Port())
+	if body := fetchAsBrowser(t, parsed.String()); !strings.Contains(body, "Brainstorm Companion") {
+		t.Error("loopback route stopped working under a wildcard bind")
+	}
+}
+
+// A wildcard bind is still a bind: unreachable hosts must not turn into a
+// wildcard URL just because the key is present.
+func TestWildcardBindHonoursExplicitURLHost(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping build-and-spawn test in short mode")
+	}
+	bin := buildBinary(t)
+	cs := connectWithArgs(t, bin, t.TempDir(), nil,
+		[]string{"--host", "0.0.0.0", "--url-host", "companion.test"})
+
+	out, _ := call(t, cs, "start_companion", nil)
+	url, _ := out["url"].(string)
+	if !strings.HasPrefix(url, "http://companion.test:") {
+		t.Errorf("URL = %q, want it to use the explicit --url-host", url)
+	}
+	if note, _ := out["url_host_note"].(string); note != "" {
+		t.Errorf("an explicit host needs no explanation, got %q", note)
 	}
 }
 

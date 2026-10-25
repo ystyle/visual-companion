@@ -61,7 +61,10 @@ type Session struct {
 	listener net.Listener
 	port     int
 	urlHost  string
-	key      string
+	// urlHostNote explains a non-obvious URL host choice (wildcard bind) so the
+	// agent can pass it on instead of the user wondering why the URL looks odd.
+	urlHostNote string
+	key         string
 
 	bus *bus
 
@@ -97,15 +100,18 @@ type Session struct {
 // SessionInfo is the JSON contract returned to the agent. Field names match
 // the original Node server so existing skill instructions keep working.
 type SessionInfo struct {
-	Type       string `json:"type"`
-	SessionID  string `json:"session_id"`
-	Port       int    `json:"port"`
-	Host       string `json:"host"`
-	URLHost    string `json:"url_host"`
-	URL        string `json:"url"`
-	ScreenDir  string `json:"screen_dir"`
-	StateDir   string `json:"state_dir"`
-	SessionDir string `json:"session_dir"`
+	Type      string `json:"type"`
+	SessionID string `json:"session_id"`
+	Port      int    `json:"port"`
+	Host      string `json:"host"`
+	URLHost   string `json:"url_host"`
+	// URLHostNote is non-empty when the URL host was inferred rather than given,
+	// e.g. when binding a wildcard address.
+	URLHostNote string `json:"url_host_note,omitempty"`
+	URL         string `json:"url"`
+	ScreenDir   string `json:"screen_dir"`
+	StateDir    string `json:"state_dir"`
+	SessionDir  string `json:"session_dir"`
 }
 
 // NewSession creates the session directory layout under root and generates its
@@ -190,11 +196,7 @@ func (s *Session) Port() int { return s.port }
 
 // URL returns the browser URL including the key.
 func (s *Session) URL() string {
-	host := s.urlHost
-	if strings.Contains(host, ":") && !strings.HasPrefix(host, "[") {
-		host = "[" + host + "]"
-	}
-	return fmt.Sprintf("http://%s:%d/?key=%s", host, s.port, s.key)
+	return fmt.Sprintf("http://%s:%d/?key=%s", hostForURL(s.urlHost), s.port, s.key)
 }
 
 // Start binds the listener and begins serving. It returns once the server is
@@ -203,11 +205,9 @@ func (s *Session) Start(host, urlHost string, openBrowser bool) (*SessionInfo, e
 	if host == "" {
 		host = "127.0.0.1"
 	}
-	if urlHost != "" {
-		s.urlHost = urlHost
-	} else if host != "127.0.0.1" && host != "localhost" {
-		s.urlHost = host
-	}
+	// The bind address and the address in the URL are deliberately separate:
+	// 0.0.0.0 accepts connections but cannot be dialled.
+	s.urlHost, s.urlHostNote = reachableHostFor(host, urlHost)
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(host, "0"))
 	if err != nil {
@@ -240,15 +240,16 @@ func (s *Session) Start(host, urlHost string, openBrowser bool) (*SessionInfo, e
 // Info snapshots the session's connection contract.
 func (s *Session) Info() *SessionInfo {
 	return &SessionInfo{
-		Type:       "server-started",
-		SessionID:  s.ID,
-		Port:       s.port,
-		Host:       s.listener.Addr().String(),
-		URLHost:    s.urlHost,
-		URL:        s.URL(),
-		ScreenDir:  s.ContentDir(),
-		StateDir:   s.StateDir(),
-		SessionDir: s.Dir,
+		Type:        "server-started",
+		SessionID:   s.ID,
+		Port:        s.port,
+		Host:        s.listener.Addr().String(),
+		URLHost:     s.urlHost,
+		URLHostNote: s.urlHostNote,
+		URL:         s.URL(),
+		ScreenDir:   s.ContentDir(),
+		StateDir:    s.StateDir(),
+		SessionDir:  s.Dir,
 	}
 }
 

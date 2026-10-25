@@ -25,6 +25,7 @@ internal/companion/
   mcp.go                      the three tools + user-facing guidance text
   launch.go                   per-platform browser launching
   roots.go                    where sessions live: flag > roots > cwd > temp
+  host.go                     bind address vs. reachable address for the URL
                               (design/version allocation lives in registry.go)
 assets/
   frame-template.html         the frame the agent's fragments are wrapped in
@@ -107,6 +108,15 @@ value type that serializes as `"roots":{}` whether or not the client supports
 roots, and `RootsV2` is tagged `json:"-"` so it never reaches the server. So
 just call `ListRoots` with a timeout and treat any error as "no workspace to
 report" — which is what the SDK's own internal root handling does too.
+
+**A bind address is not a reachable address.** `--host 0.0.0.0` accepts
+connections on every interface and is the only way to serve another machine, but
+`0.0.0.0` cannot be dialled — a URL containing it opens for nobody. `host.go`
+resolves the two separately (`reachableHostFor`): explicit `--url-host` wins,
+otherwise a wildcard bind is replaced by the machine's primary outbound address
+and `start_companion` explains the choice. Never interpolate the bind address
+into the URL, and always render hosts through `hostForURL` so IPv6 literals get
+bracketed.
 
 **Sessions always live under `<project>/.visual-companion/`.** One rule for
 every source of the project directory, rather than a special case per source.
@@ -239,6 +249,10 @@ the upstream copyright notice with them.
   或 `$HOME`。顺序是 `--project-dir` > 客户端 roots > 工作目录 > 临时目录。
 - **roots 没有可靠的能力预检**：`Roots` 是值类型（无论支不支持都序列化成
   `"roots":{}`），`RootsV2` 又是 `json:"-"`。所以直接带超时调用、失败即降级。
+- **绑定地址 ≠ 可达地址**：`--host 0.0.0.0` 才能服务其他机器，但 `0.0.0.0`
+  没法拨通，含它的 URL 谁都打不开。`host.go` 的 `reachableHostFor` 负责区分：
+  显式 `--url-host` 优先，否则通配绑定换成主出口地址，并让 agent 解释原因。
+  这层之前完全没有测试，改动后请保持 `host_test.go` 覆盖。
 - **`assets/` 和 `mcp.go` 里的指引文本是对外契约**，可以加类名，不要改名或
   重写。它们定义了 agent 能用的词汇和"何时该提议用浏览器"的行为。
 - **屏幕按 <design>/v<N>/ 版本化，绝不覆盖**：版本号是人对"这是第几轮"的抓手，
