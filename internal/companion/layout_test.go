@@ -80,6 +80,66 @@ func TestFrameScalesWithViewport(t *testing.T) {
 	}
 }
 
+// Mockups are the tool's main output, not a side case: most screens are
+// wireframes. They were missed by the first large-display pass, so every
+// wireframe class sat at a fixed rem while headings scaled — a 4K mockup looked
+// like a thumbnail pasted onto a large page.
+func TestWireframeClassesScaleWithViewport(t *testing.T) {
+	frame := string(testAssets().Frame)
+
+	// One entry per class an agent is told it can use for mockups.
+	for _, sel := range []string{
+		".mockup-header",
+		".mockup-body",
+		".mock-nav",
+		".mock-sidebar",
+		".mock-content",
+		".mock-button",
+		".mock-input",
+		".placeholder",
+		".pros",
+		".cons",
+		".card-body",
+	} {
+		// Classes may be declared alone (".pros {") or grouped (".pros, .cons {").
+		idx := strings.Index(frame, sel+" {")
+		if idx < 0 {
+			idx = strings.Index(frame, sel+",")
+		}
+		if idx < 0 {
+			t.Errorf("class %s disappeared from the frame template", sel)
+			continue
+		}
+		// Look at just this rule block.
+		end := strings.Index(frame[idx:], "}")
+		if end < 0 {
+			t.Errorf("class %s has an unterminated rule", sel)
+			continue
+		}
+		rule := frame[idx : idx+end]
+		// A rule that only sets colours is fine; one that sets a size must scale.
+		setsSize := strings.Contains(rule, "font-size") ||
+			strings.Contains(rule, "padding") || strings.Contains(rule, "min-width")
+		if setsSize && !strings.Contains(rule, "clamp(") {
+			t.Errorf("class %s sets a size but does not scale with the viewport:\n%s", sel, rule)
+		}
+	}
+}
+
+// Side-by-side mockups must not leave a dead gap under the shorter one.
+func TestSplitMockupsAbsorbExtraHeight(t *testing.T) {
+	frame := string(testAssets().Frame)
+	for _, want := range []string{
+		".split > .mockup { display: flex;",
+		".split > .mockup > .mockup-body { flex: 1;",
+	} {
+		if !strings.Contains(frame, want) {
+			t.Errorf("split mockups no longer fill their stretched cell (%q missing); "+
+				"the shorter one will show an empty band", want)
+		}
+	}
+}
+
 // Small screens must not regress: the media query for narrow layouts stays, and
 // the column is not given a fixed width that would overflow a phone.
 func TestFrameStillWorksOnSmallScreens(t *testing.T) {
