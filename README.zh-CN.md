@@ -190,6 +190,11 @@ claude mcp add visual-companion -- visual-companion --project-dir /absolute/path
 - **`list_sessions`** —— 列出活跃会话及其 URL、目录、待读交互数。只读，
   不会消耗点击。
 
+伴侣归属于启动它的那个对话。多个 agent 对话共用一个 server 时，各自有独立会话和
+独立浏览器标签页，推屏和点击**不会串台**。如果某个对话从未调用过
+`start_companion` 就调 `push_screen`，而此时还有别的会话存在，会**报错**而不是
+猜一个——它会提示你传 `session_id`。
+
 行为契约——什么时候该提议用浏览器、哪些问题该上屏哪些该留在终端——写在
 server 的 MCP `instructions` 里，所以它跟着工具走，而不是躺在某个需要 agent
 自己去读的 skill 文件里。要点：

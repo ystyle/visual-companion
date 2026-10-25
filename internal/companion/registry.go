@@ -25,6 +25,13 @@ type Registry struct {
 	sessions map[string]*Session
 	order    []string
 
+	// bound maps an MCP client session to the companion session it started.
+	// Without this, a push_screen with no explicit session_id resolves to the
+	// globally newest session — so two agent conversations sharing one MCP
+	// server silently overwrite each other's screens. That happened in
+	// practice: one conversation's page replaced another's mid-review.
+	bound map[string]string // client key -> session id
+
 	assets      Assets
 	sessionDir  string // explicit --session-dir, wins over everything
 	useRoots    bool   // consult the client's MCP roots for a workspace
@@ -39,6 +46,7 @@ type Registry struct {
 func NewRegistry(assets Assets, sessionDir, host, urlHost string, openBrowser bool) *Registry {
 	return &Registry{
 		sessions:    map[string]*Session{},
+		bound:       map[string]string{},
 		assets:      assets,
 		sessionDir:  sessionDir,
 		useRoots:    true,
@@ -96,9 +104,68 @@ func (r *Registry) StartIn(ctx context.Context, sess *mcp.ServerSession, project
 	return info, nil
 }
 
-// Resolve finds the session a tool call refers to. An empty id means "the most
-// recently started session", which is what an agent wants in the common case
-// of one companion per conversation.
+// clientKey identifies the MCP client session a tool call arrived on.
+//
+// ServerSession.ID() is authoritative when the transport provides one (HTTP);
+// stdio transports may not, so the pointer identity is the fallback. Both are
+// stable for the life of a connection, which is what "this conversation" means.
+func clientKey(sess *mcp.ServerSession) string {
+	if sess == nil {
+		return ""
+	}
+	if id := sess.ID(); id != "" {
+		return id
+	}
+	return fmt.Sprintf("ptr:%p", sess)
+}
+
+// bind records that this MCP client owns this companion session.
+func (r *Registry) bind(client string, sessionID string) {
+	if client == "" {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.bound[client] = sessionID
+}
+
+// ResolveForClient finds the session a tool call refers to.
+//
+// Order: an explicit session_id always wins; otherwise the session this client
+// started; otherwise, only when exactly one session exists at all, that one.
+// The last rule matters for single-conversation use, where callers legitimately
+// omit the id. With several sessions live and no binding, it is an error rather
+// than a guess — quietly picking the newest is what caused cross-talk.
+func (r *Registry) ResolveForClient(client, sessionID string) (*Session, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if len(r.sessions) == 0 {
+		return nil, fmt.Errorf("no companion session is running; call start_companion first")
+	}
+	if sessionID != "" {
+		s, ok := r.sessions[sessionID]
+		if !ok {
+			return nil, fmt.Errorf("unknown session_id %q; call start_companion to see active sessions", sessionID)
+		}
+		return s, nil
+	}
+	if id, ok := r.bound[client]; ok {
+		if s, ok := r.sessions[id]; ok {
+			return s, nil
+		}
+	}
+	if len(r.sessions) == 1 {
+		for _, s := range r.sessions {
+			return s, nil
+		}
+	}
+	return nil, fmt.Errorf("%d companion sessions are running and this conversation is not bound to one; "+
+		"pass session_id (see list_sessions) or call start_companion to start your own", len(r.sessions))
+}
+
+// Resolve finds the session a tool call refers to for callers without a client
+// context (tests, and the single-session path).
 func (r *Registry) Resolve(sessionID string) (*Session, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

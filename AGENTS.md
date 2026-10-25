@@ -118,6 +118,16 @@ and `start_companion` explains the choice. Never interpolate the bind address
 into the URL, and always render hosts through `hostForURL` so IPv6 literals get
 bracketed.
 
+**Sessions are bound to the MCP conversation that started them.** A host runs
+one `visual-companion` process per server, and several agent conversations may
+share it. `ResolveForClient` therefore keys on the MCP client session, not on
+"whatever session was created last". With several sessions live and a client
+that never called `start_companion`, it returns an error rather than guessing —
+guessing is what let one conversation's page replace another's mid-review.
+`list_sessions` stays global on purpose: an agent may need to see companions
+other conversations started. Do not "simplify" this back to a single newest-
+session pointer.
+
 **Sessions always live under `<project>/.visual-companion/`.** One rule for
 every source of the project directory, rather than a special case per source.
 
@@ -249,6 +259,10 @@ the upstream copyright notice with them.
   或 `$HOME`。顺序是 `--project-dir` > 客户端 roots > 工作目录 > 临时目录。
 - **roots 没有可靠的能力预检**：`Roots` 是值类型（无论支不支持都序列化成
   `"roots":{}`），`RootsV2` 又是 `json:"-"`。所以直接带超时调用、失败即降级。
+- **会话绑定到发起它的 MCP 对话**：一个宿主进程会被多个 agent 对话共用，
+  `ResolveForClient` 按 MCP 客户端会话解析，不再取"全局最新"。多会话且未绑定
+  时**报错而不是猜**——猜就是当初一个对话的页面覆盖另一个对话的原因。
+  `list_sessions` 故意保持全局，方便 agent 看到其他对话的伴侣。
 - **绑定地址 ≠ 可达地址**：`--host 0.0.0.0` 才能服务其他机器，但 `0.0.0.0`
   没法拨通，含它的 URL 谁都打不开。`host.go` 的 `reachableHostFor` 负责区分：
   显式 `--url-host` 优先，否则通配绑定换成主出口地址，并让 agent 解释原因。

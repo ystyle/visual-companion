@@ -205,6 +205,12 @@ Four tools:
 - **`list_sessions`** — lists live sessions with their URL, directory, and how
   many interactions are waiting. Read-only: it does not consume clicks.
 
+A companion belongs to the conversation that started it. If several agent
+conversations share one server, each gets its own session and its own browser
+tab; pushes and clicks never cross over. Calling `push_screen` from a
+conversation that never ran `start_companion`, while other sessions exist, is an
+error rather than a guess — it tells you to pass `session_id`.
+
 The behavioral contract — when to offer the browser at all, and which questions
 belong on screen versus in the terminal — ships in the server's MCP
 `instructions`, so it travels with the tool instead of living in a skill file

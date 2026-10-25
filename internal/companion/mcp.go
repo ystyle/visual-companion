@@ -92,6 +92,9 @@ func RegisterTools(server *mcp.Server, reg *Registry, version string) {
 		if err != nil {
 			return nil, nil, fmt.Errorf("start companion: %w", err)
 		}
+		// Bind this conversation to the session it just started, so later tool
+		// calls from here cannot land in another conversation's companion.
+		reg.bind(clientKey(req.Session), info.SessionID)
 		s, err := reg.Resolve(info.SessionID)
 		if err != nil {
 			return nil, nil, err
@@ -127,7 +130,7 @@ func RegisterTools(server *mcp.Server, reg *Registry, version string) {
 		if strings.TrimSpace(in.HTML) == "" {
 			return nil, out, fmt.Errorf("html is required")
 		}
-		s, err := reg.Resolve(in.SessionID)
+		s, err := reg.ResolveForClient(clientKey(req.Session), in.SessionID)
 		if err != nil {
 			return nil, out, err
 		}
@@ -179,7 +182,7 @@ func RegisterTools(server *mcp.Server, reg *Registry, version string) {
 			"keep is true, and cleared automatically whenever a new screen is pushed.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in EventsRequest) (*mcp.CallToolResult, EventsResult, error) {
 		var out EventsResult
-		s, err := reg.Resolve(in.SessionID)
+		s, err := reg.ResolveForClient(clientKey(req.Session), in.SessionID)
 		if err != nil {
 			return nil, out, err
 		}
